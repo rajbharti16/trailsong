@@ -40,12 +40,12 @@ GIT_TOKEN = getenv("GIT_TOKEN")
 
 SUPPORT_CHANNEL = getenv(
     "SUPPORT_CHANNEL",
-    "https://t.me/ShrutiBots"
+    "https://t.me/BOTSERAA"
 )
 
 SUPPORT_CHAT = getenv(
     "SUPPORT_CHAT",
-    "https://t.me/ShrutiSupportChat"
+    "https://t.me/+kalW1BBueupmNTZk"
 )
 
 AUTO_LEAVING_ASSISTANT = getenv(
@@ -85,24 +85,24 @@ confirmer = {}
 
 START_IMG_URL = getenv(
     "START_IMG_URL",
-    "https://graph.org/file/7557c0e0e0c1708f62d6a-6892ea881cc1555c83.jpg"
+    "https://files.catbox.moe/c8jz3q.jpg"
 )
 
 PING_IMG_URL = getenv(
     "PING_IMG_URL",
-    "https://graph.org/file/f35df5dd605d76ff790b7-953db0f3e71a2e5a1a.jpg"
+    "https://files.catbox.moe/udxo1p.jpg"
 )
 
-PLAYLIST_IMG_URL = "https://te.legra.ph/file/4ec5ae4381dffb039b4ef.jpg"
-STATS_IMG_URL = "https://te.legra.ph/file/e906c2def5afe8a9b9120.jpg"
-TELEGRAM_AUDIO_URL = "https://te.legra.ph/file/6298d377ad3eb46711644.jpg"
-TELEGRAM_VIDEO_URL = "https://te.legra.ph/file/6298d377ad3eb46711644.jpg"
-STREAM_IMG_URL = "https://te.legra.ph/file/bd995b032b6bd263e2cc9.jpg"
-SOUNCLOUD_IMG_URL = "https://te.legra.ph/file/bb0ff85f2dd44070ea519.jpg"
-YOUTUBE_IMG_URL = "https://te.legra.ph/file/6298d377ad3eb46711644.jpg"
-SPOTIFY_ARTIST_IMG_URL = "https://te.legra.ph/file/37d163a2f75e0d3b403d6.jpg"
-SPOTIFY_ALBUM_IMG_URL = "https://te.legra.ph/file/b35fd1dfca73b950b1b05.jpg"
-SPOTIFY_PLAYLIST_IMG_URL = "https://te.legra.ph/file/95b3ca7993bbfaf993dcb.jpg"
+PLAYLIST_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+STATS_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+TELEGRAM_AUDIO_URL = "https://files.catbox.moe/udxo1p.jpg"
+TELEGRAM_VIDEO_URL = "https://files.catbox.moe/udxo1p.jpg"
+STREAM_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+SOUNCLOUD_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+YOUTUBE_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+SPOTIFY_ARTIST_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+SPOTIFY_ALBUM_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
+SPOTIFY_PLAYLIST_IMG_URL = "https://files.catbox.moe/udxo1p.jpg"
 
 
 def time_to_seconds(time):
