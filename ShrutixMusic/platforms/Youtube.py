@@ -15,18 +15,6 @@ import httpx
 import yt_dlp
 
 
-def is_external_path(path):
-    if not isinstance(path, (str, os.PathLike)):
-        return False
-
-    path = os.fspath(path).strip()
-    if not path:
-        return False
-
-    parsed = urllib.parse.urlparse(path)
-    return parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
-
-
 # ── Config ────────────────────────────────────────────────────
 API_URL = os.getenv("API_URL", "https://www.riteshyt.in").rstrip("/")
 API_KEY = os.getenv("API_KEY", "riteshfreee12ef43a1e958f29fed583aa")
