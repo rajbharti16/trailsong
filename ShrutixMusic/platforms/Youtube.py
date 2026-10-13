@@ -1,5 +1,5 @@
 """
-YouTube.py — Compact YouTube platform for AloneMusic
+YouTube.py — Compact YouTube platform for ShrutixMusic
 Original: TheAloneTeam/AloneMusic (GNU v3.0)
 """
 
@@ -18,6 +18,8 @@ import yt_dlp
 # ── Config ────────────────────────────────────────────────────
 API_URL = os.getenv("API_URL", "https://www.riteshyt.in").rstrip("/")
 API_KEY = os.getenv("API_KEY", "riteshfreee12ef43a1e958f29fed583aa")
+
+DOWNLOAD_DIR = "downloads"
 
 # ── Dynamic imports with graceful fallbacks ───────────────────
 try:
@@ -40,7 +42,15 @@ except ImportError:
     Playlist = None
 
 try:
-    from AloneMusic.utils.database import is_on_off
+    from ShrutixMusic.logging import LOGGER
+except ImportError:
+
+    def LOGGER(name):
+        return logging.getLogger(name)
+
+
+try:
+    from ShrutixMusic.utils.database import is_on_off
 except ImportError:
 
     async def is_on_off(*a, **k):
@@ -48,7 +58,7 @@ except ImportError:
 
 
 try:
-    from AloneMusic.utils.formatters import time_to_seconds
+    from ShrutixMusic.utils.formatters import time_to_seconds
 except ImportError:
 
     def time_to_seconds(s):
@@ -78,9 +88,28 @@ def extract_vidid(q):
     return m.group(1) if m else None
 
 
+def is_external_path(path) -> bool:
+    """
+    True if `path` is NOT a file we downloaded into our own downloads/
+    folder (e.g. a URL / direct stream link / telegram file / custom path).
+    autoclear uses this to avoid deleting files that we don't own.
+    """
+    if not path:
+        return False
+    p = str(path).strip()
+    if p.startswith(("http://", "https://", "rtmp://", "ftp://")):
+        return True
+    try:
+        base = os.path.abspath(DOWNLOAD_DIR)
+        full = os.path.abspath(p)
+        return not (full == base or full.startswith(base + os.sep))
+    except Exception:
+        return True
+
+
 async def check_file_size(link):
     def _parse(f):
-        return sum(x.get("filesize", 0) for x in f) if f else 0
+        return sum(x.get("filesize", 0) or 0 for x in f) if f else 0
 
     async def _info():
         p = await asyncio.create_subprocess_exec(
@@ -121,32 +150,11 @@ class YouTubeAPI:
         self._client = None
         self._recent_prefetches = {}
 
-    async def related(self, videoid):
-        import re
-
-        try:
-            client = await self.get_client()
-            r = await client.get("https://www.youtube.com/watch?v=" + videoid)
-            video_ids = re.findall(r"watch\?v=([a-zA-Z0-9_-]{11})", r.text)
-            # filter out self
-            related_ids = []
-            for vid in video_ids:
-                if vid != videoid and vid not in related_ids:
-                    related_ids.append(vid)
-            if related_ids:
-                return related_ids[0]
-        except Exception:
-            pass
-        return None
-
     async def get_related_videos(self, videoid):
-        import re
-
         try:
             client = await self.get_client()
-            r = await client.get("https://www.youtube.com/watch?v=" + videoid)
+            r = await client.get(self.base + videoid)
             video_ids = re.findall(r"watch\?v=([a-zA-Z0-9_-]{11})", r.text)
-            # filter out self
             related_ids = []
             for vid in video_ids:
                 if vid != videoid and vid not in related_ids:
@@ -154,6 +162,10 @@ class YouTubeAPI:
             return related_ids
         except Exception:
             return []
+
+    async def related(self, videoid):
+        ids = await self.get_related_videos(videoid)
+        return ids[0] if ids else None
 
     async def get_client(self):
         if self._client is None or self._client.is_closed:
@@ -547,73 +559,65 @@ class YouTubeAPI:
                         pass
                 return False
 
+        # ── 1) API download ───────────────────────────────────
         if API_URL:
             dt = "video" if (video or songvideo) else "audio"
             link = self._clean_link(link)
             vidid = extract_vidid(link) or link
             ext = "mp4" if dt == "video" else "mp3"
             if songvideo:
-                fp = f"downloads/{title}.mp4"
+                fp = f"{DOWNLOAD_DIR}/{title}.mp4"
                 if await _dl_api(link, "video", fp):
                     return fp
             elif songaudio:
-                fp = f"downloads/{title}.mp3"
+                fp = f"{DOWNLOAD_DIR}/{title}.mp3"
                 if await _dl_api(link, "audio", fp):
                     return fp
             else:
-                fp = f"downloads/{vidid}.{ext}"
+                fp = f"{DOWNLOAD_DIR}/{vidid}.{ext}"
                 asyncio.create_task(self.prefetch(link, video=bool(dt == "video")))
                 if await _dl_api(link, dt, fp):
                     return fp, True
-        loop = asyncio.get_running_loop()
+
+        # ── 2) Local yt-dlp fallback ──────────────────────────
+        link = self._clean_link(link)
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         _base_opts = {
             "geo_bypass": True,
             "nocheckcertificate": True,
             "quiet": True,
             "no_warnings": True,
         }
+        if os.path.exists("cookies.txt"):
+            _base_opts["cookiefile"] = "cookies.txt"
 
-        def _audio_dl():
-            x = yt_dlp.YoutubeDL(
-                {
-                    **_base_opts,
-                    "format": "bestaudio/best",
-                    "outtmpl": "downloads/%(id)s.%(ext)s",
-                }
-            )
-            info = x.extract_info(link, False)
-            p = os.path.join("downloads", f"{info['id']}.{info['ext']}")
-            return p if os.path.exists(p) else x.download([link]) or p
+        def _run(opts, url):
+            with yt_dlp.YoutubeDL(opts) as y:
+                info = y.extract_info(url, download=False)
+                path = os.path.join(
+                    DOWNLOAD_DIR, f"{info['id']}.{info['ext']}"
+                )
+                if not os.path.exists(path):
+                    y.download([url])
+                return info
 
-        def _video_dl():
-            x = yt_dlp.YoutubeDL(
-                {
-                    **_base_opts,
-                    "format": "(bestvideo[height<=?720][width<=?1280][ext=mp4])+(bestaudio[ext=m4a])",
-                    "outtmpl": "downloads/%(id)s.%(ext)s",
-                }
-            )
-            info = x.extract_info(link, False)
-            p = os.path.join("downloads", f"{info['id']}.{info['ext']}")
-            return p if os.path.exists(p) else x.download([link]) or p
-
-        def _song_video_dl():
-            yt_dlp.YoutubeDL(
-                {
+        try:
+            if songvideo:
+                opts = {
                     **_base_opts,
                     "format": f"{format_id}+140",
-                    "outtmpl": f"downloads/{title}",
+                    "outtmpl": f"{DOWNLOAD_DIR}/{title}",
                     "prefer_ffmpeg": True,
                     "merge_output_format": "mp4",
                 }
-            ).download([link])
+                await asyncio.to_thread(_run, opts, link)
+                return f"{DOWNLOAD_DIR}/{title}.mp4"
 
-        def _song_audio_dl():
-            yt_dlp.YoutubeDL(
-                {
+            if songaudio:
+                opts = {
                     **_base_opts,
-                    "format": format_id,
-                    "outtmpl": f"downloads/{title}.%(ext)s",
+                    "format": format_id or "bestaudio/best",
+                    "outtmpl": f"{DOWNLOAD_DIR}/{title}.%(ext)s",
                     "prefer_ffmpeg": True,
                     "postprocessors": [
                         {
@@ -623,46 +627,46 @@ class YouTubeAPI:
                         }
                     ],
                 }
-            ).download([link])
+                await asyncio.to_thread(_run, opts, link)
+                return f"{DOWNLOAD_DIR}/{title}.mp3"
 
-        if songvideo:
-            await loop.run_in_executor(None, _song_video_dl)
-            return f"downloads/{title}.mp4"
-        if songaudio:
-            await loop.run_in_executor(None, _song_audio_dl)
-            return f"downloads/{title}.mp3"
-        if video:
-            if await is_on_off(1):
-                direct = True
-                df = await loop.run_in_executor(None, _video_dl)
+            if video:
+                opts = {
+                    **_base_opts,
+                    "format": "(bestvideo[height<=?720][width<=?1280][ext=mp4])+(bestaudio[ext=m4a])",
+                    "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
+                    "merge_output_format": "mp4",
+                }
             else:
-                p = await asyncio.create_subprocess_exec(
-                    "yt-dlp",
-                    "-g",
-                    "-f",
-                    "best[height<=?720][width<=?1280]",
-                    f"{link}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                out, _err = await p.communicate()
-                if out:
-                    return out.decode().split("\n")[0], False
-                fs = await check_file_size(link)
-                if not fs:
-                    print("None file Size")
-                    return
-                if fs / (1024 * 1024) > 250:
-                    print(f"File size {fs/(1024*1024):.2f} MB exceeds the 100MB limit.")
-                    return None
-                direct = True
-                df = await loop.run_in_executor(None, _video_dl)
-            return df, direct
-        return await loop.run_in_executor(None, _audio_dl), True
-
-    async def close(self):
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+                opts = {
+                    **_base_opts,
+                    "format": "bestaudio/best",
+                    "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
+                }
+            info = await asyncio.to_thread(_run, opts, link)
+            ext = "mp4" if video else info.get("ext", "webm")
+            path = f"{DOWNLOAD_DIR}/{info['id']}.{ext}"
+            return path, True
+        except Exception as e:
+            logging.warning(f"yt-dlp fallback download failed for {link}: {e}")
+            return None
 
 
-YouTube = YouTubeAPI()
+# ── Module-level helpers (imported by other modules) ──────────
+_yt = YouTubeAPI()
+
+
+async def get_autoplay(videoid, played=None):
+    """
+    Return the next related video id for autoplay, skipping anything in
+    `played` (iterable of video ids). Returns None if nothing found.
+    """
+    played = set(played or [])
+    try:
+        ids = await _yt.get_related_videos(videoid)
+    except Exception:
+        return None
+    for vid in ids:
+        if vid not in played:
+            return vid
+    return None
